@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversor wplace</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --text: #1a1a1a; --muted: #666;
+    --border: #d9d9de; --accent: #2b6cff; --accent-text: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --panel: #1e1e22; --text: #eaeaea; --muted: #9a9aa3;
+      --border: #333339; --accent: #4d8bff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .panel + .panel { margin-top: 12px; }
+  .panel h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  label { display: block; margin: 10px 0 4px; font-weight: 600; }
+  label span.v { font-weight: 400; color: var(--muted); }
+  input[type=number], select { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+  input[type=range] { width: 100%; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-weight: 500; }
+  .check input { width: auto; }
+  button { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; font-weight: 600; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.small { padding: 4px 8px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .drop { border: 2px dashed var(--border); border-radius: 10px; padding: 24px; text-align: center; color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  .drop input { display: none; }
+  .preview-wrap { overflow: auto; background: repeating-conic-gradient(#8883 0 25%, transparent 0 50%) 0 0 / 16px 16px; border: 1px solid var(--border); border-radius: 8px; min-height: 300px; display: flex; align-items: flex-start; justify-content: center; padding: 8px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .stat .v { font-size: 20px; font-weight: 700; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  .color { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: var(--bg); border-radius: 6px; font-size: 12px; }
+  .swatch { width: 22px; height: 22px; border-radius: 4px; border: 1px solid #0003; flex: none; }
+  .color .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .color .c { font-weight: 700; }
+  .paid { color: #c58a00; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .palgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-top: 8px; }
+  .pal { aspect-ratio: 1; border-radius: 5px; border: 2px solid transparent; cursor: pointer; position: relative; opacity: .3; }
+  .pal.on { opacity: 1; border-color: var(--text); }
+  .pal.paid::after { content: "★"; position: absolute; right: 2px; bottom: 0; font-size: 10px; color: #fff; text-shadow: 0 0 2px #000; }
+  .palhead { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .palhead span { color: var(--muted); font-size: 12px; margin-left: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Conversor de imagen a píxeles de wplace</h1>
+  <p>Sube una imagen, ajusta el tamaño y descarga la plantilla en la paleta exacta de wplace.live</p>
+</header>
+<main>
+  <aside>
+    <div class="panel">
+      <h2>Imagen</h2>
+      <label class="drop" id="drop">
+        Arrastra una imagen aquí, pégala con Ctrl+V o haz clic para elegirla
+        <input type="file" id="file" accept="image/*">
+      </label>
+      <div class="hint" id="srcInfo">Sin imagen</div>
+    </div>
+
+    <div class="panel">
+      <h2>Tamaño</h2>
+      <div class="row">
+        <input type="number" id="width" min="1" max="2000" value="64">
+        <input type="number" id="height" min="1" max="2000" value="64">
+      </div>
+      <div class="check"><input type="checkbox" id="keepRatio" checked><label style="margin:0;font-weight:500">Mantener proporción</label></div>
+      <div class="hint">Ancho × alto en píxeles de wplace. Más píxeles = más detalle, pero más tiempo.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Paleta</h2>
+      <div class="palhead">
+        <button class="small" id="palFree">Solo gratis</button>
+        <button class="small" id="palAll">Todos</button>
+        <button class="small" id="palNone">Ninguno</button>
+        <span id="palCount"></span>
+      </div>
+      <div class="palgrid" id="palgrid"></div>
+      <div class="hint">Haz clic para activar o desactivar cada color. Marca los de pago (★) que tengas comprados. Para retratos ayudan mucho los tonos Peach y Tan.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Ajustes de imagen</h2>
+      <label>Brillo <span class="v" id="brightV">0</span></label>
+      <input type="range" id="bright" min="-100" max="100" value="0">
+      <label>Contraste <span class="v" id="contrastV">0</span></label>
+      <input type="range" id="contrast" min="-100" max="100" value="0">
+      <label>Saturación <span class="v" id="satV">100</span>%</label>
+      <input type="range" id="sat" min="0" max="200" value="100">
+      <label>Umbral de transparencia <span class="v" id="alphaV">128</span></label>
+      <input type="range" id="alpha" min="0" max="255" value="128">
+    </div>
+
+    <div class="panel">
+      <h2>Dithering</h2>
+      <select id="dither">
+        <option value="none">Ninguno (colores planos, más limpio)</option>
+        <option value="fs" selected>Floyd-Steinberg (difusión de error)</option>
+        <option value="bayer">Ordenado (patrón Bayer, estilo retro)</option>
+      </select>
+      <label>Fuerza <span class="v" id="dstrV">35</span>%</label>
+      <input type="range" id="dstr" min="0" max="100" value="35">
+      <div class="hint">Con pocas tonalidades, entre 30 y 60 % suele quedar mejor que al 100 %. Si ves puntos sueltos de colores raros, baja la fuerza o quita esos colores de la paleta.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Vista previa</h2>
+      <label>Zoom <span class="v" id="zoomV">8</span>x</label>
+      <input type="range" id="zoom" min="1" max="24" value="8">
+      <div class="check"><input type="checkbox" id="grid"><label style="margin:0;font-weight:500">Mostrar cuadrícula</label></div>
+      <div class="check"><input type="checkbox" id="showOrig"><label style="margin:0;font-weight:500">Comparar con el original</label></div>
+    </div>
+
+    <div class="panel">
+      <h2>Exportar</h2>
+      <label>Tu carga máxima de píxeles</label>
+      <input type="number" id="charges" min="1" value="30">
+      <div class="actions">
+        <button class="primary" id="dlPng" disabled>Descargar PNG 1:1 (plantilla)</button>
+        <button id="dlBig" disabled>Descargar PNG ampliado</button>
+        <button id="copyList" disabled>Copiar lista de colores</button>
+        <button id="copyJson" disabled>Copiar plantilla para el asistente</button>
+      </div>
+      <div class="hint">El PNG 1:1 sirve para overlays tipo Blue Marble. La "plantilla para el asistente" se pega en el userscript que elige el color automáticamente al pasar por cada píxel.</div>
+    </div>
+  </aside>
+
+  <section>
+    <div class="panel">
+      <h2>Resumen</h2>
+      <div class="stats">
+        <div class="stat"><div class="v" id="sPixels">0</div><div class="k">píxeles a pintar</div></div>
+        <div class="stat"><div class="v" id="sColors">0</div><div class="k">colores usados</div></div>
+        <div class="stat"><div class="v" id="sPaid">0</div><div class="k">colores de pago</div></div>
+        <div class="stat"><div class="v" id="sTime">–</div><div class="k">tiempo estimado</div></div>
+      </div>
+      <div class="colors" id="colorList"></div>
+    </div>
+    <div class="panel">
+      <h2>Vista previa</h2>
+      <div class="preview-wrap"><canvas id="preview"></canvas><canvas id="origPreview" style="display:none;margin-left:8px"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<script>
+// Paleta de wplace.live: [id, nombre, rgb, dePago]. Edítala aquí si el sitio la cambia.
+const PALETTE = [
+  [1,"Black",[0,0,0],false],[2,"Dark Gray",[60,60,60],false],[3,"Gray",[120,120,120],false],
+  [4,"Light Gray",[210,210,210],false],[5,"White",[255,255,255],false],[6,"Deep Red",[96,0,24],false],
+  [7,"Red",[237,28,36],false],[8,"Orange",[255,127,39],false],[9,"Gold",[246,170,9],false],
+  [10,"Yellow",[249,221,59],false],[11,"Light Yellow",[255,250,188],false],[12,"Dark Green",[14,185,104],false],
+  [13,"Green",[19,230,123],false],[14,"Light Green",[135,255,94],false],[15,"Dark Teal",[12,129,110],false],
+  [16,"Teal",[16,174,166],false],[17,"Light Teal",[19,225,190],false],[18,"Dark Blue",[40,80,158],false],
+  [19,"Blue",[64,147,228],false],[20,"Cyan",[96,247,242],false],[21,"Indigo",[107,80,246],false],
+  [22,"Light Indigo",[153,177,251],false],[23,"Dark Purple",[120,12,153],false],[24,"Purple",[170,56,185],false],
+  [25,"Light Purple",[224,159,249],false],[26,"Dark Pink",[203,0,122],false],[27,"Pink",[236,31,128],false],
+  [28,"Light Pink",[243,141,169],false],[29,"Dark Brown",[104,70,52],false],[30,"Brown",[149,104,42],false],
+  [31,"Beige",[248,178,119],false],
+  [32,"Medium Gray",[170,170,170],true],[33,"Dark Red",[165,14,30],true],[34,"Light Red",[250,128,114],true],
+  [35,"Dark Orange",[228,92,26],true],[36,"Light Tan",[214,181,148],true],[37,"Dark Goldenrod",[156,132,49],true],
+  [38,"Goldenrod",[197,173,70],true],[39,"Light Goldenrod",[232,212,95],true],[40,"Dark Olive",[74,107,58],true],
+  [41,"Olive",[90,148,74],true],[42,"Light Olive",[132,197,115],true],[43,"Dark Cyan",[15,121,159],true],
+  [44,"Light Cyan",[187,250,242],true],[45,"Light Blue",[125,199,255],true],[46,"Dark Indigo",[77,49,184],true],
+  [47,"Dark Slate Blue",[74,66,132],true],[48,"Slate Blue",[122,113,196],true],[49,"Light Slate Blue",[181,174,241],true],
+  [50,"Light Brown",[219,164,99],true],[51,"Dark Beige",[209,128,81],true],[52,"Light Beige",[255,197,165],true],
+  [53,"Dark Peach",[155,82,73],true],[54,"Peach",[209,128,120],true],[55,"Light Peach",[250,182,164],true],
+  [56,"Dark Tan",[123,99,82],true],[57,"Tan",[156,132,107],true],[58,"Dark Slate",[51,57,65],true],
+  [59,"Slate",[109,117,141],true],[60,"Light Slate",[179,185,209],true],[61,"Dark Stone",[109,100,63],true],
+  [62,"Stone",[148,140,107],true],[63,"Light Stone",[205,197,158],true],
+];
+
+const $ = id => document.getElementById(id);
+let srcImg = null;      // HTMLImageElement
+let result = null;      // {w, h, idx: Int16Array (-1 = vacío), counts: Map, pal}
+
+// --- Color: sRGB -> Oklab (distancia perceptual) ---
+const LIN = new Float32Array(256);
+for (let i = 0; i < 256; i++) { const c = i / 255; LIN[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function linOf(v) { v = v < 0 ? 0 : v > 255 ? 255 : v; const i = v | 0; const f = v - i; return i >= 255 ? LIN[255] : LIN[i] + (LIN[i + 1] - LIN[i]) * f; }
+function toOklab(r, g, b, out) {
+  const lr = linOf(r), lg = linOf(g), lb = linOf(b);
+  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+  out[0] = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  out[1] = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  out[2] = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  return out;
+}
+PALETTE.forEach(p => { p.lab = toOklab(p[2][0], p[2][1], p[2][2], [0, 0, 0]); });
+
+// --- Selección de paleta (persistente) ---
+const SELKEY = 'wplacePalSel';
+let enabled = new Set();
+try { const s = JSON.parse(localStorage.getItem(SELKEY)); if (Array.isArray(s) && s.length) enabled = new Set(s); } catch (e) {}
+if (!enabled.size) enabled = new Set(PALETTE.filter(p => !p[3]).map(p => p[0]));
+function saveSel() { try { localStorage.setItem(SELKEY, JSON.stringify([...enabled])); } catch (e) {} }
+function buildPalGrid() {
+  const g = $('palgrid'); g.innerHTML = '';
+  for (const [id, name, [r, gg, b], paid] of PALETTE) {
+    const d = document.createElement('div');
+    d.className = 'pal' + (paid ? ' paid' : '') + (enabled.has(id) ? ' on' : '');
+    d.style.background = `rgb(${r},${gg},${b})`;
+    d.title = `${name}${paid ? ' (de pago)' : ''}`;
+    d.onclick = () => { if (enabled.has(id)) enabled.delete(id); else enabled.add(id); d.classList.toggle('on'); saveSel(); updatePalCount(); render(); };
+    g.appendChild(d);
+  }
+  updatePalCount();
+}
+function updatePalCount() { $('palCount').textContent = `${enabled.size} activos`; }
+function setSel(ids) { enabled = new Set(ids); saveSel(); buildPalGrid(); render(); }
+$('palFree').onclick = () => setSel(PALETTE.filter(p => !p[3]).map(p => p[0]));
+$('palAll').onclick = () => setSel(PALETTE.map(p => p[0]));
+$('palNone').onclick = () => setSel([]);
+buildPalGrid();
+
+// --- Carga de imagen ---
+function loadFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    srcImg = img;
+    $('srcInfo').textContent = `${file.name} · ${img.naturalWidth}×${img.naturalHeight}`;
+    if ($('keepRatio').checked) syncHeight();
+    render();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+$('file').addEventListener('change', e => loadFile(e.target.files[0]));
+const drop = $('drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); loadFile(e.dataTransfer.files[0]); });
+window.addEventListener('paste', e => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) loadFile(item.getAsFile());
+});
+
+// --- Ajustes ---
+function syncHeight() {
+  if (!srcImg) return;
+  const w = +$('width').value || 1;
+  $('height').value = Math.max(1, Math.round(w * srcImg.naturalHeight / srcImg.naturalWidth));
+}
+function syncWidth() {
+  if (!srcImg) return;
+  const h = +$('height').value || 1;
+  $('width').value = Math.max(1, Math.round(h * srcImg.naturalWidth / srcImg.naturalHeight));
+}
+$('width').addEventListener('input', () => { if ($('keepRatio').checked) syncHeight(); render(); });
+$('height').addEventListener('input', () => { if ($('keepRatio').checked) syncWidth(); render(); });
+['dither','alpha','charges','bright','contrast','sat','dstr'].forEach(id => $(id).addEventListener('input', render));
+['zoom','grid','showOrig'].forEach(id => $(id).addEventListener('input', draw));
+for (const [id, out] of [['alpha','alphaV'],['zoom','zoomV'],['bright','brightV'],['contrast','contrastV'],['sat','satV'],['dstr','dstrV']]) {
+  $(id).addEventListener('input', () => $(out).textContent = $(id).value);
+}
+
+// --- Reducción de tamaño con filtro de caja (reduce a mitades hasta acercarse) ---
+function downscale(img, w, h) {
+  let cw = img.naturalWidth, ch = img.naturalHeight;
+  let src = img;
+  while (cw / 2 >= w && ch / 2 >= h) {
+    const c = document.createElement('canvas');
+    cw = Math.floor(cw / 2); ch = Math.floor(ch / 2);
+    c.width = cw; c.height = ch;
+    const x = c.getContext('2d');
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    x.drawImage(src, 0, 0, cw, ch);
+    src = c;
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+// --- Conversión ---
+const BAYER = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
+function activePalette() { return PALETTE.filter(p => enabled.has(p[0])); }
+function convert() {
+  if (!srcImg) return null;
+  const pal = activePalette();
+  if (!pal.length) return null;
+  const w = Math.max(1, Math.min(2000, +$('width').value || 1));
+  const h = Math.max(1, Math.min(2000, +$('height').value || 1));
+  const data = downscale(srcImg, w, h).data;
+  const alphaT = +$('alpha').value;
+  const mode = $('dither').value;
+  const strength = +$('dstr').value / 100;
+  const bright = +$('bright').value;
+  const contrast = +$('contrast').value;
+  const sat = +$('sat').value / 100;
+  const cf = (259 * (contrast + 255)) / (255 * (259 - contrast));
+  const idx = new Int16Array(w * h).fill(-1);
+  const counts = new Map();
+
+  // Buffer flotante con ajustes de imagen aplicados
+  const buf = new Float32Array(w * h * 3);
+  for (let i = 0; i < w * h; i++) {
+    let r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+    if (sat !== 1) { const l = 0.299*r + 0.587*g + 0.114*b; r = l + (r - l) * sat; g = l + (g - l) * sat; b = l + (b - l) * sat; }
+    if (contrast) { r = cf * (r - 128) + 128; g = cf * (g - 128) + 128; b = cf * (b - 128) + 128; }
+    if (bright) { r += bright; g += bright; b += bright; }
+    buf[i*3] = r; buf[i*3+1] = g; buf[i*3+2] = b;
+  }
+
+  const lab = [0, 0, 0];
+  function nearest(r, g, b) {
+    toOklab(r, g, b, lab);
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < pal.length; i++) {
+      const p = pal[i].lab;
+      const dl = lab[0] - p[0], da = lab[1] - p[1], db = lab[2] - p[2];
+      // Se pesa más el tono (a, b) que la luminosidad para evitar puntos grises en zonas de color
+      const d = dl*dl + 3*(da*da + db*db);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+
+  for (let y = 0; y < h; y++) {
+    const serp = mode === 'fs' && (y & 1);
+    for (let xx = 0; xx < w; xx++) {
+      const x = serp ? w - 1 - xx : xx;
+      const i = y * w + x;
+      if (data[i*4+3] < alphaT) continue;
+      let r = buf[i*3], g = buf[i*3+1], b = buf[i*3+2];
+      if (mode === 'bayer') {
+        const t = (BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.5) * 64 * strength;
+        r += t; g += t; b += t;
+      }
+      r = r < 0 ? 0 : r > 255 ? 255 : r;
+      g = g < 0 ? 0 : g > 255 ? 255 : g;
+      b = b < 0 ? 0 : b > 255 ? 255 : b;
+      const pi = nearest(r, g, b);
+      idx[i] = pi;
+      counts.set(pi, (counts.get(pi) || 0) + 1);
+      if (mode === 'fs' && strength > 0) {
+        const [pr, pg, pb] = pal[pi][2];
+        const er = (r - pr) * strength, eg = (g - pg) * strength, eb = (b - pb) * strength;
+        const dir = serp ? -1 : 1;
+        const spread = (dx, dy, f) => {
+          const nx = x + dx * dir, ny = y + dy;
+          if (nx < 0 || nx >= w || ny >= h) return;
+          const j = ny * w + nx;
+          if (data[j*4+3] < alphaT) return;
+          buf[j*3] += er * f; buf[j*3+1] += eg * f; buf[j*3+2] += eb * f;
+        };
+        spread(1, 0, 7/16); spread(-1, 1, 3/16); spread(0, 1, 5/16); spread(1, 1, 1/16);
+      }
+    }
+  }
+  return { w, h, idx, counts, pal, orig: data };
+}
+
+// --- Render ---
+let renderTimer = null;
+function render() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => { result = convert(); draw(); updateStats(); }, 30);
+}
+function draw() {
+  const cv = $('preview'), ov = $('origPreview');
+  if (!result) { cv.width = cv.height = 0; ov.style.display = 'none'; return; }
+  const z = +$('zoom').value;
+  const { w, h, idx, pal } = result;
+  cv.width = w * z; cv.height = h * z;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const p = idx[y * w + x];
+    if (p < 0) continue;
+    const [r, g, b] = pal[p][2];
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x * z, y * z, z, z);
+  }
+  if ($('grid').checked && z >= 4) {
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= w; x++) { ctx.moveTo(x * z + .5, 0); ctx.lineTo(x * z + .5, h * z); }
+    for (let y = 0; y <= h; y++) { ctx.moveTo(0, y * z + .5); ctx.lineTo(w * z, y * z + .5); }
+    ctx.stroke();
+  }
+  if ($('showOrig').checked) {
+    ov.style.display = '';
+    ov.width = w * z; ov.height = h * z;
+    const t = document.createElement('canvas'); t.width = w; t.height = h;
+    t.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(result.orig), w, h), 0, 0);
+    const oc = ov.getContext('2d'); oc.imageSmoothingEnabled = false;
+    oc.clearRect(0, 0, ov.width, ov.height);
+    oc.drawImage(t, 0, 0, w * z, h * z);
+  } else ov.style.display = 'none';
+}
+function fmtTime(sec) {
+  if (sec < 60) return `${Math.round(sec)} s`;
+  const m = sec / 60; if (m < 60) return `${Math.round(m)} min`;
+  const hh = m / 60; if (hh < 48) return `${hh.toFixed(1)} h`;
+  return `${(hh / 24).toFixed(1)} días`;
+}
+function updateStats() {
+  const list = $('colorList');
+  list.innerHTML = '';
+  const has = !!result;
+  ['dlPng','dlBig','copyList','copyJson'].forEach(id => $(id).disabled = !has);
+  if (!has) { $('sPixels').textContent = $('sColors').textContent = $('sPaid').textContent = '0'; $('sTime').textContent = '–'; return; }
+  const { counts, pal } = result;
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  const paid = [...counts.keys()].filter(k => pal[k][3]).length;
+  $('sPixels').textContent = total.toLocaleString('es');
+  $('sColors').textContent = counts.size;
+  $('sPaid').textContent = paid;
+  const C = Math.max(1, +$('charges').value || 1);
+  const sec = Math.max(0, total - C) * 30;
+  $('sTime').textContent = total <= C ? 'ahora mismo' : fmtTime(sec);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [k, n] of sorted) {
+    const [id, name, [r, g, b], isPaid] = pal[k];
+    const el = document.createElement('div');
+    el.className = 'color';
+    el.innerHTML = `<div class="swatch" style="background:rgb(${r},${g},${b})"></div>
+      <div class="n">${name}${isPaid ? ' <span class="paid">★</span>' : ''}</div><div class="c">${n}</div>`;
+    el.title = `#${id} ${name} rgb(${r},${g},${b})${isPaid ? ' (de pago)' : ''}`;
+    list.appendChild(el);
+  }
+}
+
+// --- Exportar ---
+function makeCanvas(scale) {
+  const { w, h, idx, pal } = result;
+  const c = document.createElement('canvas');
+  c.width = w * scale; c.height = h * scale;
+  const ctx = c.getContext('2d');
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const p = idx[y * w + x];
+    if (p < 0) continue;
+    const [r, g, b] = pal[p][2];
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x * scale, y * scale, scale, scale);
+  }
+  return c;
+}
+function download(canvas, name) {
+  const a = document.createElement('a');
+  a.download = name; a.href = canvas.toDataURL('image/png'); a.click();
+}
+async function copyText(btn, text, label) {
+  await navigator.clipboard.writeText(text);
+  btn.textContent = 'Copiado';
+  setTimeout(() => btn.textContent = label, 1200);
+}
+$('dlPng').addEventListener('click', () => download(makeCanvas(1), `wplace_${result.w}x${result.h}.png`));
+$('dlBig').addEventListener('click', () => download(makeCanvas(Math.max(1, +$('zoom').value)), `wplace_${result.w}x${result.h}_zoom.png`));
+$('copyList').addEventListener('click', e => {
+  const { counts, pal } = result;
+  const lines = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${pal[k][1]}${pal[k][3] ? ' (pago)' : ''}: ${n}`);
+  copyText(e.target, lines.join('\n'), 'Copiar lista de colores');
+});
+// Plantilla compacta para el userscript: matriz de ids de color de wplace (0 = vacío)
+$('copyJson').addEventListener('click', e => {
+  const { w, h, idx, pal } = result;
+  const ids = Array.from(idx, p => p < 0 ? 0 : pal[p][0]);
+  const colors = {};
+  for (const p of pal) colors[p[0]] = p[2];
+  copyText(e.target, JSON.stringify({ w, h, ids, colors }), 'Copiar plantilla para el asistente');
+});
+</script>
+</body>
+</html>
